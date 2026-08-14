@@ -209,3 +209,5 @@ No license file is currently included. Add a `LICENSE` (e.g. MIT, Apache-2.0) if
 ## Acknowledgements
 
 Built on [Streamlit](https://streamlit.io/), [LangGraph](https://github.com/langchain-ai/langgraph), [LangChain](https://python.langchain.com/), and the OpenAI-compatible chat/embeddings API.
+
+<p align="center">Made with ❤️ by Ahmad Mujtaba</p>

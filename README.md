@@ -8,6 +8,8 @@ An agentic system that evolves a system prompt across generations — mutating, 
 ![LangChain](https://img.shields.io/badge/LangChain-langchain--openai-1C3C3C)
 ![uv](https://img.shields.io/badge/Package%20Manager-uv-de5fe9)
 
+**Repository:** https://github.com/pypi-ahmad/self-improving-prompt-optimizer
+
 ## Features
 
 - **Multi-objective LLM-as-judge scoring** — every candidate prompt is judged on `accuracy`, `clarity`, `conciseness`, and `helpfulness` (1–10, per benchmark case); `consistency` is derived from the variance of those scores across cases.
@@ -59,6 +61,11 @@ Self-Improving Prompt Optimizer/
 ## Installation & Setup
 
 **Requirements:** Python 3.13+, [uv](https://docs.astral.sh/uv/), and access to an OpenAI-compatible API.
+
+```bash
+git clone https://github.com/pypi-ahmad/self-improving-prompt-optimizer.git
+cd self-improving-prompt-optimizer
+```
 
 ### Windows — one click
 

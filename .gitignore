@@ -1,0 +1,21 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets
+.env
+
+# Local tool artifacts (not part of the project)
+.claude/
+.codegraph/
+.code-review-graph/
+
+# Runtime-generated data
+data/

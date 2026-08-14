@@ -16,6 +16,7 @@ wheels/
 .claude/
 .codegraph/
 .code-review-graph/
+graphify-out/
 
 # Runtime-generated data
 data/

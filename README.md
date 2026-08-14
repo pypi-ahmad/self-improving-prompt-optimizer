@@ -78,7 +78,7 @@ uv sync
 uv run streamlit run app.py
 ```
 
-Streamlit will open the app at `http://localhost:8501`.
+Streamlit will open the app at `http://localhost:8531` (port set in `.streamlit/config.toml`).
 
 ## Environment Variables
 
@@ -88,6 +88,7 @@ The app reads these directly from the environment (`evaluator.py`, `app.py`):
 |---|---|---|
 | `OPENAI_API_KEY` | Yes | API key for your OpenAI-compatible endpoint. The app refuses to start without it. |
 | `OPENAI_BASE_URL` | No | Base URL of the endpoint (e.g. an enterprise gateway or proxy). Falls back to the client's default (`https://api.openai.com/v1`) if unset. |
+| `AGNES_API_KEY` | No | Enables `agnes-2.5-flash` ([Agnes AI](https://www.agnes-ai.com/en/docs/overview), OpenAI-compatible, free tier) as a selectable model. Only used when that model is picked. |
 
 Two ways to set them:
 

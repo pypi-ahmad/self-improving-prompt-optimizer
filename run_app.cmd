@@ -24,6 +24,6 @@ if errorlevel 1 (
 )
 
 echo Starting the Self-Improving Prompt Optimizer...
-uv run streamlit run app.py
+uv run streamlit run app.py --server.port 8531
 
 pause

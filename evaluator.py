@@ -20,17 +20,31 @@ ALL_METRICS = JUDGED_METRICS + ["consistency"]
 FALLBACK_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]
 PREFERRED_DEFAULTS = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-5-mini", "gpt-4o", "gpt-4.1"]
 
+# Extra OpenAI-compatible providers beyond the default OPENAI_API_KEY/OPENAI_BASE_URL
+# one, keyed by exact model id. Add a line here for any other provider the same way.
+EXTRA_PROVIDERS = {
+    "agnes-2.5-flash": {"api_key_env": "AGNES_API_KEY", "base_url": "https://apihub.agnes-ai.com/v1"},
+}
+
 
 def _base_url() -> str | None:
     return os.environ.get("OPENAI_BASE_URL") or None
 
 
+def _credentials_for(model_name: str) -> tuple[str, str | None]:
+    provider = EXTRA_PROVIDERS.get(model_name)
+    if provider:
+        return os.environ[provider["api_key_env"]], provider["base_url"]
+    return os.environ["OPENAI_API_KEY"], _base_url()
+
+
 def build_llm(model_name: str, temperature: float) -> ChatOpenAI:
+    api_key, base_url = _credentials_for(model_name)
     return ChatOpenAI(
         model=model_name,
         temperature=temperature,
-        api_key=os.environ["OPENAI_API_KEY"],
-        base_url=_base_url(),
+        api_key=api_key,
+        base_url=base_url,
     )
 
 
@@ -46,17 +60,22 @@ def list_available_models() -> list[str]:
     """Best-effort chat-model list from the configured base URL, with a
     sensible small/cheap model sorted first. Excludes fine-tuned deployments
     (their ids contain ':') since a benchmark run isn't the place to pick one.
-    Falls back to a short hardcoded list if the endpoint doesn't expose /models."""
+    Falls back to a short hardcoded list if the endpoint doesn't expose /models.
+    Models from EXTRA_PROVIDERS are appended when their API key is set."""
     try:
         client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], base_url=_base_url())
         ids = sorted(m.id for m in client.models.list().data if ":" not in m.id)
-        if not ids:
-            return FALLBACK_MODELS
-        preferred = [m for m in PREFERRED_DEFAULTS if m in ids]
-        rest = [m for m in ids if m not in preferred]
-        return preferred + rest
+        if ids:
+            preferred = [m for m in PREFERRED_DEFAULTS if m in ids]
+            rest = [m for m in ids if m not in preferred]
+            models = preferred + rest
+        else:
+            models = list(FALLBACK_MODELS)
     except Exception:
-        return FALLBACK_MODELS
+        models = list(FALLBACK_MODELS)
+
+    extras = [name for name, p in EXTRA_PROVIDERS.items() if os.environ.get(p["api_key_env"])]
+    return models + [m for m in extras if m not in models]
 
 
 def run_candidate_prompt(llm: ChatOpenAI, candidate_prompt: str, input_text: str) -> str:

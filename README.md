@@ -204,7 +204,7 @@ To retarget the app at a different task entirely, edit `DEFAULT_BASE_PROMPT` / `
 
 ## License
 
-No license file is currently included. Add a `LICENSE` (e.g. MIT, Apache-2.0) if you intend to share or open-source this project.
+[MIT](LICENSE)
 
 ## Acknowledgements
 

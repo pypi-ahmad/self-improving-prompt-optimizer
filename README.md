@@ -18,9 +18,9 @@ An agentic system that evolves a system prompt across generations — mutating, 
 - **Mutation + crossover** — an LLM rewrites elite prompts (mutation) and blends pairs of elites (crossover) to fill each new generation.
 - **Embedding-based diversity control** — candidates whose embedding is too similar (cosine similarity above a threshold) to an existing elite are rejected, preventing population collapse into near-duplicates.
 - **Elitism + score caching** — elites carried forward unchanged are read from a cache instead of being re-judged, cutting redundant API calls.
-- **Plateau + max-generation stopping** — the run stops automatically once the best score has been flat for 3 generations or the generation limit is reached.
+- **Plateau + max-generation stopping** — the run stops automatically once the best score has stayed within a narrow band (±0.05) for 3 generations, or the generation limit is reached.
 - **Pause, stop, and mid-run injection** — the LangGraph workflow is checkpointed and pauses between generations, so you can stop a run cleanly or inject your own custom prompt into the next generation, with no background threads involved.
-- **Fixed or auto-generated benchmark** — ship with 8 built-in test cases, or click a button to have the LLM design a new 6–8 case benchmark from a task description (saved to `data/generated_benchmark.json` for reuse).
+- **Fixed or auto-generated benchmark** — ship with 8 built-in test cases, or click a button to have the LLM design a new 7-case benchmark from a task description (saved to `data/generated_benchmark.json` for reuse).
 - **Live progress, logs, and history** — generation counter, best score, elite size, Pareto front size, a scrollable log, a full evaluation history table, and per-test-case drill-down for any prompt ever scored.
 - **Exports** — download the best prompt as `.txt`, and the full run history as `.json` or `.csv`.
 
@@ -127,7 +127,7 @@ START → initialize_population
     │  update_elite            (commit new elite set, track best prompt/score)
     │      │
     │      ▼
-    │  check_stopping_condition  (max generations reached, or best score plateaued for 3 generations)
+    │  check_stopping_condition  (max generations reached, or best score plateaued within ±0.05 for 3 generations)
     │      │
     └──────┴─── continue ──────┘         stop → END
 ```
@@ -197,7 +197,7 @@ To retarget the app at a different task entirely, edit `DEFAULT_BASE_PROMPT` / `
 
 ## Future Improvements
 
-- Expose the elite pool cap as its own sidebar control (currently fixed to population size).
+- Expose the elite pool cap as its own sidebar control (currently fixed to `max(population size, 3)`).
 - Optional toggle to surface fine-tuned/dated model deployments in the model dropdown (hidden by default).
 - A non-Streamlit CLI entry point for headless/batch runs.
 - Containerization (Dockerfile) for deployment outside a local machine.

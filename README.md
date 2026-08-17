@@ -89,7 +89,7 @@ cd self-improving-prompt-optimizer
 
 ### Windows — one click
 
-Double-click **`run_app.cmd`**. It checks for `uv`, warns if `OPENAI_API_KEY` isn't set, runs `uv sync` to install/update dependencies, then launches the app.
+Double-click **`run_app.cmd`**. It installs `uv` if it isn't already on your PATH, creates `.env` from `.env.example` on first run, warns if `OPENAI_API_KEY` still isn't set, runs `uv sync` to create `.venv` in the project root and install/update dependencies, then launches the app.
 
 ### Manual (any OS)
 

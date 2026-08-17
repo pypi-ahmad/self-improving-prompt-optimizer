@@ -10,6 +10,26 @@ An agentic system that evolves a system prompt across generations — mutating, 
 
 **Repository:** https://github.com/pypi-ahmad/self-improving-prompt-optimizer
 
+This project is free, open-source, and community-driven. It runs entirely on your own machine with your own API key — cloning it, testing it, filing bugs, suggesting features, and sending pull requests are all genuinely welcome. See [Contributing](#contributing) below.
+
+## Contents
+
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Installation & Setup](#installation--setup)
+- [Environment Variables](#environment-variables)
+- [Usage](#usage)
+- [How It Works](#how-it-works)
+- [Configuration Options](#configuration-options)
+- [Examples](#examples)
+- [Future Improvements](#future-improvements)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [Disclaimer & Data Responsibility](#disclaimer--data-responsibility)
+- [Support the Project](#support-the-project)
+- [License](#license)
+
 ## Features
 
 - **Multi-objective LLM-as-judge scoring** — every candidate prompt is judged on `accuracy`, `clarity`, `conciseness`, and `helpfulness` (1–10, per benchmark case); `consistency` is derived from the variance of those scores across cases.
@@ -201,6 +221,28 @@ To retarget the app at a different task entirely, edit `DEFAULT_BASE_PROMPT` / `
 - Optional toggle to surface fine-tuned/dated model deployments in the model dropdown (hidden by default).
 - A non-Streamlit CLI entry point for headless/batch runs.
 - Containerization (Dockerfile) for deployment outside a local machine.
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to set up a dev environment and submit a change |
+| [SECURITY.md](SECURITY.md) | How to report a vulnerability privately |
+| [SUPPORT.md](SUPPORT.md) | Where to get help and what response time to expect |
+| [DISCLAIMER.md](DISCLAIMER.md) | Data responsibility, no-warranty, and no-financial-relationship terms |
+| [LICENSE](LICENSE) | MIT license terms |
+
+## Contributing
+
+Bug reports, feature requests, doc fixes, and pull requests are all welcome — this is a community-driven project maintained on a best-effort basis, and no contribution is too small. See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up, and [SUPPORT.md](SUPPORT.md) for how to ask a question or report an issue.
+
+## Disclaimer & Data Responsibility
+
+Everything this app processes — your base prompt, task description, benchmark cases, and generated candidate prompts — is **100% your responsibility**. It runs on your own machine with your own API key; nothing is sent anywhere except to whichever OpenAI-compatible endpoint (or Agnes AI) you've configured. Optimization run state lives only in memory and is not persisted to disk; the one exception is an auto-generated benchmark, saved locally and unencrypted to `data/generated_benchmark.json`. Please read the full [DISCLAIMER.md](DISCLAIMER.md) before using this with anything sensitive, and see [SECURITY.md](SECURITY.md) to report a vulnerability privately.
+
+## Support the Project
+
+If you find this useful, the best ways to support it are to **use it, report bugs, suggest features, or contribute code** — see [Contributing](#contributing) above. This project does **not** want or accept donations, sponsorships, or any other financial support. It's shared freely because it's useful, not for profit.
 
 ## License
 

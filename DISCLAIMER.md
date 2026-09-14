@@ -25,6 +25,6 @@ This tool uses an LLM to mutate prompts, judge candidate outputs, and score them
 
 ## No financial relationship
 
-This project does not want or accept donations, sponsorships, or any form of financial support. See [README.md](README.md#support-the-project) for details. Using this software creates no financial relationship between you and the author.
+This project does not want or accept donations, sponsorships, or any form of financial support. Using this software creates no financial relationship between you and the author.
 
 If any of this is unclear, please open an issue — see [SUPPORT.md](SUPPORT.md).

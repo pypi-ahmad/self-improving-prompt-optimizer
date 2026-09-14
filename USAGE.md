@@ -2,7 +2,7 @@
 
 A step-by-step walkthrough of the Streamlit app, grounded in the actual UI
 code in `app.py`. For what the app is and how it's built, see
-[ARCHITECTURE.md](ARCHITECTURE.md).
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## 1. First-time setup
 
@@ -86,7 +86,7 @@ Three tabs appear once at least one generation has run:
 ## 5. Starting over vs. continuing
 
 There is no "load a past run" feature — optimization state lives only in
-memory for the current app session (see [ARCHITECTURE.md](ARCHITECTURE.md)'s
+memory for the current app session (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)'s
 "No persistence" note). Clicking **Start Optimization** again always
 begins a brand-new run with a fresh thread; if you want to keep exploring
 the same run, use Stop/Resume, Inject, or "Run next generation" instead of

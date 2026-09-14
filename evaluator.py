@@ -2,6 +2,14 @@
 
 All model calls go through here so graph.py stays free of prompt-formatting
 and API-shape details.
+
+Must not raise out of judge_output or embed_texts for ordinary provider
+failures — callers depend on graceful degradation (neutral fallback scores,
+skipped diversity filtering) to keep one bad LLM/embeddings call from
+aborting an entire generation.
+
+See graph.py for how these functions are called each generation, and
+prompts.py for the templates formatted here (JUDGE_PROMPT_TEMPLATE).
 """
 
 import json
@@ -31,6 +39,8 @@ def _base_url() -> str | None:
     return os.environ.get("OPENAI_BASE_URL") or None
 
 
+# Single choke point mapping a model name to its API key/base_url, including the
+# EXTRA_PROVIDERS override — extend provider routing here, not by branching in callers.
 def _credentials_for(model_name: str) -> tuple[str, str | None]:
     provider = EXTRA_PROVIDERS.get(model_name)
     if provider:
@@ -86,6 +96,9 @@ def run_candidate_prompt(llm: ChatOpenAI, candidate_prompt: str, input_text: str
 def judge_output(
     llm: ChatOpenAI, candidate_prompt: str, case: dict, output_text: str, log: list[str]
 ) -> dict:
+    # Always returns all of JUDGED_METRICS as floats, success or failure — callers
+    # (evaluate_prompt) index into this dict unconditionally and never check for
+    # missing keys.
     prompt = JUDGE_PROMPT_TEMPLATE.format(
         candidate_prompt=candidate_prompt,
         input_text=case["input"],

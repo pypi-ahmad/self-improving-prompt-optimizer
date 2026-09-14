@@ -1,6 +1,14 @@
 """Prompt templates: the default optimization target plus every meta-prompt
 used to mutate/crossover candidates, judge outputs, and auto-generate a
 benchmark. Edit these strings to retarget the optimizer at a new task.
+
+Every template's "respond with ONLY JSON, no prose" instruction is a hard
+contract: callers parse the raw response directly with
+json.loads(strip_json_fence(...)) (graph.py, evaluator.py, benchmark.py) and
+treat any prose or malformed JSON as a failure, not as text to salvage.
+
+See evaluator.py, benchmark.py, and graph.py for where these templates are
+formatted and their JSON outputs parsed.
 """
 
 DEFAULT_TASK_DESCRIPTION = (
@@ -62,6 +70,8 @@ no markdown fences, no numbering.
 # LLM-as-judge
 # ---------------------------------------------------------------------------
 
+# "reasoning" is requested to make the model think before scoring, but judge_output()
+# (evaluator.py) reads only JUDGED_METRICS and discards it.
 JUDGE_PROMPT_TEMPLATE = """You are a strict evaluator scoring how well an AI response handled a task.
 
 Task instruction given to the AI (the candidate prompt being tested):

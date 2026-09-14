@@ -2,6 +2,13 @@
 
 Each test case is `{"input": str, "guideline": str}`. To change the domain,
 either edit DEFAULT_BENCHMARK below or use `generate_benchmark()` from the UI.
+
+Must not return an empty or partially-shaped case list from
+generate_benchmark() — callers treat a successful return as ready to persist
+and use immediately, with no further validation.
+
+See prompts.py for the generation template and graph.py's evaluate_batch for
+how the returned list of cases is consumed.
 """
 
 import json
@@ -53,11 +60,15 @@ def load_benchmark(use_generated: bool) -> list[dict]:
         try:
             return json.loads(GENERATED_BENCHMARK_PATH.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
+            # A missing, hand-edited, or corrupted generated_benchmark.json must never
+            # block a run — silently fall back to the built-in benchmark instead.
             pass
     return DEFAULT_BENCHMARK
 
 
 def save_benchmark(cases: list[dict]) -> None:
+    # Overwrites the file wholesale — no versioning or merge, so a repeat "Generate
+    # benchmark" click permanently discards the previous auto-generated set.
     GENERATED_BENCHMARK_PATH.parent.mkdir(parents=True, exist_ok=True)
     GENERATED_BENCHMARK_PATH.write_text(json.dumps(cases, indent=2), encoding="utf-8")
 
@@ -71,6 +82,8 @@ def generate_benchmark(llm, task_description: str, count: int = 7) -> list[dict]
     cases = json.loads(strip_json_fence(raw))
     if not isinstance(cases, list) or not cases:
         raise ValueError("Benchmark generation returned no test cases.")
+    # Tolerates a partially malformed LLM response by dropping individual cases
+    # missing a key, rather than failing the whole batch over one bad entry.
     cleaned = [
         {"input": str(c["input"]), "guideline": str(c["guideline"])}
         for c in cases

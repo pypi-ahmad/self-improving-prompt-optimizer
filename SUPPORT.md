@@ -16,7 +16,7 @@ This is a personal, single-maintainer, best-effort project. There's no SLA and n
 
 ## No financial support needed or wanted
 
-This project does not want or accept donations, sponsorships, or any other form of financial contribution. If you'd like to support the project, the most valuable things you can do are: report bugs, suggest features, improve the docs, or submit a PR. See [CONTRIBUTING.md](CONTRIBUTING.md).
+This project does not want or accept donations, sponsorships, or any other form of financial contribution. If you'd like to support the project, the most valuable things you can do are: report bugs, suggest features, improve the docs, or submit a PR. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ## Before you ask
 

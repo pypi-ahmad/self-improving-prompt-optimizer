@@ -4,6 +4,11 @@ Drives graph.py one generation at a time: the compiled LangGraph pauses
 (via `interrupt_before=["generate_variations"]`) right before each new
 generation, which is exactly where this app wants to show progress and let
 the user inject a prompt or stop before continuing.
+
+Must not hold optimization state itself beyond what Streamlit's
+session_state and the LangGraph checkpointer already track. See graph.py
+for the state machine, and evaluator.py for the LLM/embedding calls this
+file makes directly (model listing, benchmark generation).
 """
 
 import csv
@@ -38,11 +43,16 @@ if not os.environ.get("OPENAI_API_KEY"):
     st.stop()
 
 
+# Streamlit reruns this whole script on every interaction; @st.cache_resource keeps
+# one compiled graph (and its InMemorySaver checkpoint) alive across reruns instead
+# of silently rebuilding it — and losing all run state — on every widget event.
 @st.cache_resource
 def get_graph():
     return build_graph()
 
 
+# Cached for the same rerun-on-every-interaction reason: avoids re-hitting the
+# /models endpoint on every widget interaction.
 @st.cache_resource
 def get_model_options():
     try:
@@ -64,6 +74,11 @@ def init_session_state():
 
 
 def run_one_generation(graph):
+    # `None` as the input is LangGraph's resume signal: the graph is currently
+    # paused at interrupt_before=["generate_variations"], so this continues from
+    # the checkpointed state rather than starting a new run. Failures are caught
+    # into session_state (not raised) so they surface as an error banner on the
+    # next rerun instead of an unhandled traceback replacing the whole page.
     try:
         result = graph.invoke(None, st.session_state.config)
     except Exception as exc:
@@ -223,6 +238,9 @@ def main():
 
     if start_clicked:
         benchmark = load_benchmark(config["use_generated_benchmark"]) or DEFAULT_BENCHMARK
+        # A fresh thread_id starts a brand-new checkpoint: any previous run's
+        # population/elite/history is discarded, not carried over (no cross-run
+        # persistence — see graph.py).
         thread_config = new_thread_config()
         initial_state = {
             "task_description": config["task_description"],
@@ -271,6 +289,10 @@ def main():
             inject_col, button_col = st.columns([4, 1])
             inject_text = inject_col.text_input("Inject a custom prompt into the next generation", key="inject_text")
             if button_col.button("Inject") and inject_text.strip():
+                # Writes directly into the paused thread's checkpoint; only valid
+                # because the graph is currently interrupted before
+                # generate_variations, which reads and clears pending_injections
+                # on its next invocation.
                 try:
                     current = st.session_state.state.get("pending_injections", [])
                     graph.update_state(st.session_state.config, {"pending_injections": current + [inject_text.strip()]})
@@ -289,7 +311,7 @@ def main():
                 with st.spinner(f"Running generation {state.get('generation', 0) + 1}..."):
                     run_one_generation(graph)
                 if not st.session_state.finished and not st.session_state.stopped:
-                    time.sleep(0.2)
+                    time.sleep(0.2)  # brief pacing so the UI renders before the next auto-rerun
                 st.rerun()
     else:
         st.success(f"Finished: {state.get('stop_reason', 'done')}")

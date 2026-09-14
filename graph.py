@@ -8,6 +8,11 @@ Compiled with a checkpointer and `interrupt_before=["generate_variations"]` so
 app.py can pause between generations to show progress, let the user inject a
 prompt or stop, then resume with `graph.invoke(None, config)` — one call
 advances exactly one generation.
+
+State lives only in this process's memory via InMemorySaver: this module must
+not add disk persistence without also updating the "no persistence" claims in
+DISCLAIMER.md/ARCHITECTURE.md. See evaluator.py for the LLM/embedding calls
+the nodes below make, and utils.py for the pure scoring/selection math.
 """
 
 import json
@@ -52,6 +57,10 @@ class OptimizerState(TypedDict):
     best_score: float
     best_metrics: dict
     best_score_history: list[float]
+    # Annotated[..., operator.add] is a LangGraph reducer: each node's returned
+    # `history`/`logs` list is concatenated onto the running state list rather than
+    # replacing it, so any node can append a partial list without holding (or
+    # overwriting) everything earlier nodes already logged this generation.
     history: Annotated[list[dict], operator.add]
     pending_injections: list[str]
     should_stop: bool
@@ -109,6 +118,11 @@ def generate_variations(state: OptimizerState) -> dict:
     if not elite:
         add(state["base_prompt"], "base")
     else:
+        # Every current elite is carried forward unconditionally, uncapped by
+        # pop_size. multi_objective_selection floors the elite pool at
+        # max(pop_size, 3), so with a small population_size (1-2) more elites can
+        # exist than pop_size allows — this generation's candidate count can then
+        # exceed pop_size even before mutation/crossover adds anything.
         for e in elite:
             add(e["prompt"], "elite")
 
@@ -175,6 +189,10 @@ def filter_by_diversity(state: OptimizerState) -> dict:
 
     kept: list[dict] = []
     kept_vectors: list[list[float]] = []
+    # kept_vectors accumulates as candidates are accepted, so similarity is checked
+    # against elites AND everything already kept this generation — two near-identical
+    # mutations in the same batch reject the second one too, not just repeats of an
+    # existing elite.
     for candidate, vec in zip(population, vectors):
         candidate = {**candidate, "embedding": vec}
         sim = max_similarity(vec, elite_vectors + kept_vectors)
@@ -205,6 +223,8 @@ def evaluate_batch(state: OptimizerState) -> dict:
     history_rows: list[dict] = []
 
     for candidate in state["population"]:
+        # Cache key is the exact prompt string: any whitespace or wording change is
+        # a cache miss and re-spends a full judge pass, even if semantically identical.
         cached = cache.get(candidate["prompt"])
         if cached:
             metrics, per_case = cached["metrics"], cached["per_case"]
@@ -235,6 +255,9 @@ def multi_objective_selection(state: OptimizerState) -> dict:
     Pareto front, and pick the next elite set per the chosen strategy."""
     logs: list[str] = []
     strategy = state["selection_strategy"]
+    # Floors the elite pool at 3 so it never collapses to 1-2 prompts when
+    # population_size is small — see generate_variations' note on how this can make
+    # a generation's candidate count exceed population_size.
     cap = max(state["population_size"], 3)
 
     pool = {c["prompt"]: c for c in state["elite"]}
@@ -277,6 +300,8 @@ def update_elite(state: OptimizerState) -> dict:
     else:
         logs.append(f"No improvement this generation (best remains {state['best_score']:.2f}).")
 
+    # Appended every generation, not just on improvement: check_stopping_condition's
+    # plateau detection needs one entry per generation to measure a flat window.
     result["best_score_history"] = state["best_score_history"] + [result.get("best_score", state["best_score"])]
     result["logs"] = logs
     return result

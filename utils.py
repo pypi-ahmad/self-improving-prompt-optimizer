@@ -1,10 +1,19 @@
-"""Small pure-stdlib helpers shared by evaluator.py, benchmark.py and graph.py."""
+"""Small pure-stdlib helpers shared by evaluator.py, benchmark.py and graph.py.
+
+Must not import from those modules (or from Streamlit): this is a leaf
+dependency, kept free of API keys, prompt formatting, and UI concerns so it
+stays trivially testable in isolation. See graph.py for the primary caller.
+"""
 
 import math
 
 
 def strip_json_fence(text: str) -> str:
-    """Strip a ```json ... ``` markdown fence if the LLM wrapped its JSON in one."""
+    """Strip a ```json ... ``` markdown fence if the LLM wrapped its JSON in one.
+
+    Assumes at most one fenced block wrapping the whole response; a fence
+    appearing mid-content rather than wrapping it would be mis-parsed.
+    """
     text = text.strip()
     if text.startswith("```"):
         text = text.split("```")[1]

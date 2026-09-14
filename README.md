@@ -1,257 +1,142 @@
 # Self-Improving Prompt Optimizer
 
-An agentic system that evolves a system prompt across generations — mutating, evaluating, and selecting candidates with multi-objective LLM-as-judge scoring — until it converges on the best-performing version against a fixed benchmark.
+Self-Improving Prompt Optimizer is an agentic system that iteratively evolves and refines system prompts across generations. Orchestrated with LangGraph and evaluated using multi-objective LLM-as-judge scoring, the application mutates, crosses over, diversity-filters, and selects candidate prompts against a test benchmark through an interactive Streamlit web interface.
 
-![Python](https://img.shields.io/badge/Python-3.13%2B-blue)
-![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B)
-![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-1C3C3C)
-![LangChain](https://img.shields.io/badge/LangChain-langchain--openai-1C3C3C)
-![uv](https://img.shields.io/badge/Package%20Manager-uv-de5fe9)
+## Requirements
 
-**Repository:** https://github.com/pypi-ahmad/self-improving-prompt-optimizer
+- Python: `>=3.13` (specified in `pyproject.toml` and `.python-version`)
+- Package manager: [uv](https://docs.astral.sh/uv/)
+- Dependencies (from `pyproject.toml`):
+  - `langchain>=1.3.15`
+  - `langchain-openai>=1.5.0`
+  - `langgraph>=1.2.11`
+  - `python-dotenv>=1.2.2`
+  - `streamlit>=1.61.1`
+- External API access: An OpenAI-compatible API endpoint providing chat completions and vector embeddings (`text-embedding-3-small`).
 
-This project is free, open-source, and community-driven. It runs entirely on your own machine with your own API key — cloning it, testing it, filing bugs, suggesting features, and sending pull requests are all genuinely welcome. See [Contributing](#contributing) below.
+## Setup and run commands
 
-## Contents
+### Installation (cross-platform)
 
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Installation & Setup](#installation--setup)
-- [Environment Variables](#environment-variables)
-- [Usage](#usage)
-- [How It Works](#how-it-works)
-- [Configuration Options](#configuration-options)
-- [Examples](#examples)
-- [Future Improvements](#future-improvements)
-- [Documentation](#documentation)
-- [Contributing](#contributing)
-- [Disclaimer & Data Responsibility](#disclaimer--data-responsibility)
-- [Support the Project](#support-the-project)
-- [License](#license)
-
-## Features
-
-- **Multi-objective LLM-as-judge scoring** — every candidate prompt is judged on `accuracy`, `clarity`, `conciseness`, and `helpfulness` (1–10, per benchmark case); `consistency` is derived from the variance of those scores across cases.
-- **Three selection strategies** — `Weighted Score` (top-N by weighted sum), `Pareto Front` (non-dominated solutions only), or `Hybrid` (default: union of both, capped).
-- **User-adjustable metric weights** — five sliders recompute the weighted score live, even for prompts scored earlier in the run.
-- **Mutation + crossover** — an LLM rewrites elite prompts (mutation) and blends pairs of elites (crossover) to fill each new generation.
-- **Embedding-based diversity control** — candidates whose embedding is too similar (cosine similarity above a threshold) to an existing elite are rejected, preventing population collapse into near-duplicates.
-- **Elitism + score caching** — elites carried forward unchanged are read from a cache instead of being re-judged, cutting redundant API calls.
-- **Plateau + max-generation stopping** — the run stops automatically once the best score has stayed within a narrow band (±0.05) for 3 generations, or the generation limit is reached.
-- **Pause, stop, and mid-run injection** — the LangGraph workflow is checkpointed and pauses between generations, so you can stop a run cleanly or inject your own custom prompt into the next generation, with no background threads involved.
-- **Fixed or auto-generated benchmark** — ship with 8 built-in test cases, or click a button to have the LLM design a new 7-case benchmark from a task description (saved to `data/generated_benchmark.json` for reuse).
-- **Live progress, logs, and history** — generation counter, best score, elite size, Pareto front size, a scrollable log, a full evaluation history table, and per-test-case drill-down for any prompt ever scored.
-- **Exports** — download the best prompt as `.txt`, and the full run history as `.json` or `.csv`.
-
-## Demo / Screenshots
-
-_No screenshots yet — suggested spots to capture: the sidebar configuration panel, the live progress metrics during a run, and the Pareto Front tab._
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| UI | [Streamlit](https://streamlit.io/) |
-| Orchestration | [LangGraph](https://github.com/langchain-ai/langgraph) (`StateGraph`, `InMemorySaver` checkpointer, `interrupt_before`) |
-| LLM client | [LangChain](https://python.langchain.com/) + `langchain_openai.ChatOpenAI` / `OpenAIEmbeddings` |
-| LLM backend | Any OpenAI-compatible API, configured via `OPENAI_API_KEY` / `OPENAI_BASE_URL` |
-| Env loading | `python-dotenv` (optional `.env`, never overrides real environment variables) |
-| Package management | [uv](https://docs.astral.sh/uv/) |
-| Language | Python ≥ 3.13 |
-
-## Project Structure
-
-```
-Self-Improving Prompt Optimizer/
-├── app.py                    # Streamlit UI — sidebar config, run driver, results tabs
-├── graph.py                  # LangGraph workflow: state schema + the 7 optimization nodes
-├── evaluator.py               # ChatOpenAI execution, LLM-as-judge scoring, embeddings
-├── benchmark.py               # Fixed benchmark + LLM-based benchmark auto-generation
-├── prompts.py                 # Default base prompt + every meta-prompt template
-├── utils.py                    # Pure-stdlib helpers: cosine similarity, Pareto front, weighted score
-├── run_app.cmd                 # One-click Windows launcher (uv sync + streamlit run)
-├── pyproject.toml / uv.lock     # Dependency manifest (uv-managed)
-├── .env.example                 # Template for OPENAI_API_KEY / OPENAI_BASE_URL
-├── .gitignore
-└── data/
-    └── generated_benchmark.json  # Created on first "Generate Benchmark" click
-```
-
-## Installation & Setup
-
-**Requirements:** Python 3.13+, [uv](https://docs.astral.sh/uv/), and access to an OpenAI-compatible API.
+Clone the repository and install dependencies using `uv`:
 
 ```bash
 git clone https://github.com/pypi-ahmad/self-improving-prompt-optimizer.git
 cd self-improving-prompt-optimizer
+uv sync
 ```
 
-### Windows — one click
+### Running the application (cross-platform)
 
-Double-click **`run_app.cmd`**. It installs `uv` if it isn't already on your PATH, creates `.env` from `.env.example` on first run, warns if `OPENAI_API_KEY` still isn't set, runs `uv sync` to create `.venv` in the project root and install/update dependencies, then launches the app.
-
-### Manual (any OS)
+Ensure environment variables are configured, then launch the Streamlit server:
 
 ```bash
-uv sync
 uv run streamlit run app.py
 ```
 
-Streamlit will open the app at `http://localhost:8531` (port set in `.streamlit/config.toml`).
+The web interface serves by default at `http://localhost:8531` (configured in `.streamlit/config.toml`).
 
-## Environment Variables
+### Automated launcher (Windows only)
 
-The app reads these directly from the environment (`evaluator.py`, `app.py`):
+On Windows systems, a batch script is provided to automate environment initialization and startup:
+
+```cmd
+run_app.cmd
+```
+
+`run_app.cmd` performs the following steps:
+1. Installs `uv` via PowerShell if not found on the system PATH.
+2. Copies `.env.example` to `.env` if `.env` is absent.
+3. Warns if `OPENAI_API_KEY` is not set.
+4. Executes `uv sync`.
+5. Starts Streamlit on port `8531`.
+
+## Configuration
+
+### Environment variables
+
+The application reads configuration from system environment variables and `.env` (loaded via `python-dotenv`). System environment variables take precedence over values in `.env`.
 
 | Variable | Required | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | Yes | API key for your OpenAI-compatible endpoint. The app refuses to start without it. |
-| `OPENAI_BASE_URL` | No | Base URL of the endpoint (e.g. an enterprise gateway or proxy). Falls back to the client's default (`https://api.openai.com/v1`) if unset. |
-| `AGNES_API_KEY` | No | Enables `agnes-2.5-flash` ([Agnes AI](https://www.agnes-ai.com/en/docs/overview), OpenAI-compatible, free tier) as a selectable model. Only used when that model is picked. |
+| `OPENAI_API_KEY` | Yes | API key for the OpenAI or OpenAI-compatible endpoint. The application halts at startup if unset. |
+| `OPENAI_BASE_URL` | No | Base URL for the OpenAI-compatible endpoint. Defaults to `https://api.openai.com/v1` if unset. |
+| `AGNES_API_KEY` | No | API key for Agnes AI. If set, exposes `agnes-2.5-flash` (`https://apihub.agnes-ai.com/v1`) as a selectable model in the UI dropdown. |
 
-Two ways to set them:
+An example template is provided in `.env.example`:
 
-1. **System environment variables** (recommended if you already have them set) — the app uses these automatically, no extra step needed.
-2. **`.env` file** — copy `.env.example` to `.env` and fill in your values. Loaded via `python-dotenv`, but a variable already present in the system environment always takes priority over `.env`.
-
-## Usage
-
-1. Launch the app (`run_app.cmd` or `uv run streamlit run app.py`).
-2. In the sidebar, set the **base prompt**, **task description**, model/temperature, population size, number of generations, mutation strength, metric weights, selection strategy, diversity threshold, and benchmark source.
-3. Click **Start Optimization**.
-4. Watch live metrics (generation, best score, elite size, Pareto front size) and the log expander as each generation runs.
-5. Optionally: check **Run continuously** to auto-advance generations, click **Run next generation** to step manually, type a prompt into the injection box and click **Inject** to seed it into the next generation, or click **Stop** to halt the run (progress is preserved; click **Resume** to continue).
-6. When finished, inspect the **Best Prompt**, **Pareto Front**, and **History** tabs, and download results.
-
-## How It Works
-
-### The optimization loop (`graph.py`)
-
-```
-START → initialize_population
-           │
-           ▼
-    ┌─► generate_variations   (elitism + LLM mutation/crossover + injected prompts)
-    │      │
-    │      ▼
-    │  filter_by_diversity     (reject candidates too similar to existing elites, by embedding cosine similarity)
-    │      │
-    │      ▼
-    │  evaluate_batch          (run each candidate on the benchmark, LLM-as-judge scores it, cache hits skip re-scoring)
-    │      │
-    │      ▼
-    │  multi_objective_selection  (merge into elite pool, compute Pareto front, rank by weighted score)
-    │      │
-    │      ▼
-    │  update_elite            (commit new elite set, track best prompt/score)
-    │      │
-    │      ▼
-    │  check_stopping_condition  (max generations reached, or best score plateaued within ±0.05 for 3 generations)
-    │      │
-    └──────┴─── continue ──────┘         stop → END
+```bash
+# Copy to .env and populate keys
+OPENAI_API_KEY=sk-your-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1
+AGNES_API_KEY=your-agnes-key-here
 ```
 
-The graph is compiled with an `InMemorySaver` checkpointer and `interrupt_before=["generate_variations"]`, so it automatically pauses right before each new generation starts. `app.py` drives it with `graph.invoke(None, config)` — one call resolves exactly one generation — which is what makes **Stop** and **mid-run injection** possible without any background threads: the app simply chooses when (or whether) to call `invoke` again.
+### Configuration files
 
-### Scoring
+- `.env`: Local environment file (ignored by version control).
+- `.env.example`: Reference configuration template.
+- `.streamlit/config.toml`: Pins the server port to `8531`.
 
-For each candidate prompt, `evaluator.py` runs it as a system prompt against every benchmark case, then asks the LLM to judge the output on `accuracy`, `clarity`, `conciseness`, and `helpfulness` (1–10 each). `consistency` is *not* judged directly — it's computed from the standard deviation of per-case scores, so a prompt that performs unevenly across inputs is penalized. A weighted score is then computed from the five metrics using the sidebar's weight sliders (normalized to sum to 1).
+## Repository map
 
-### Diversity filtering
-
-Every candidate prompt is embedded with `OpenAIEmbeddings`. If its cosine similarity to any existing elite (or another candidate already accepted this generation) exceeds the diversity threshold, it's rejected as a near-duplicate — unless that would empty the whole generation, in which case one candidate is kept anyway. If the embeddings endpoint is unavailable, the filter is skipped gracefully rather than failing the run.
-
-### Selection strategies
-
-- **Weighted Score** — keep the top-N candidates by weighted score.
-- **Pareto Front** — keep only non-dominated candidates (no other candidate scores at least as well on every metric and strictly better on at least one).
-- **Hybrid** (default) — union of the Pareto front and the top-weighted candidates, capped at the population size.
-
-## Configuration Options
-
-| Sidebar control | Effect |
-|---|---|
-| Base prompt | The seed prompt for generation 1. |
-| Task description | Used to steer mutation/crossover and (optionally) auto-generate a benchmark. |
-| Model | Any chat model exposed by your endpoint's `/models` list (fine-tuned deployments are filtered out of the dropdown). |
-| Temperature | Passed to `ChatOpenAI` for both candidate execution and judging. |
-| Population size | Target number of candidates per generation; also the elite pool cap. |
-| Number of generations | Hard stop on generation count. |
-| Mutation strength | `low` / `medium` / `high` — how much the mutation prompt is told to change the seed. |
-| Metric weights (×5) | Relative importance of each metric in the weighted score; recomputed live. |
-| Selection strategy | `Weighted Score` / `Pareto Front` / `Hybrid`. |
-| Diversity threshold | Max allowed cosine similarity before a candidate is rejected as a duplicate. |
-| Benchmark source | `Built-in` (8 fixed cases) or `Auto-generated` (LLM-designed, persisted to disk). |
-
-## Examples
-
-**Default task:** _"Improve the following user message to be more professional, clear, and actionable."_
-
-**Sample benchmark case** (`benchmark.py`):
-
-```json
-{
-  "input": "hey can u send me the report by tmrw morning, need it for the meeting thx",
-  "guideline": "Should read as a professional, clear, actionable request with a concrete deadline; casual abbreviations removed."
-}
+```
+self-improving-prompt-optimizer/
+├── app.py                 # Streamlit UI, sidebar controls, step execution, and data exports
+├── graph.py               # LangGraph state machine, 7 optimization nodes, and checkpointer
+├── evaluator.py           # Model and embedding client factory, candidate execution, and scoring
+├── benchmark.py           # Static 8-case benchmark, loader, saver, and auto-generation
+├── prompts.py             # Default prompts and JSON-only meta-prompt templates
+├── utils.py               # Pure-stdlib helper functions (Pareto front, cosine similarity, weights)
+├── run_app.cmd            # Windows-only automated setup and launch script
+├── pyproject.toml         # Project metadata and dependency definitions
+├── uv.lock                # Locked dependency tree
+├── .python-version        # Pinned Python version (3.13)
+├── .env.example           # Environment variable template
+├── .streamlit/
+│   └── config.toml        # Streamlit server port configuration (8531)
+├── data/
+│   └── generated_benchmark.json  # Runtime auto-generated benchmark (git-ignored)
+└── docs/
+    ├── ARCHITECTURE.md    # System architecture, state schema, data flow, and external dependencies
+    ├── TECHNICAL.md       # Implementation details, invariants, error handling, and persistence
+    ├── RUNBOOK.md         # Operational procedures, startup/shutdown, and troubleshooting
+    └── CONTRIBUTING.md    # Development setup, branch conventions, and testing expectations
 ```
 
-**Sample history row** (as exported to CSV/JSON):
+## How to run tests
 
-```json
-{
-  "generation": 2,
-  "source": "mutation",
-  "prompt": "You are a professional editor tasked with enhancing the user's message...",
-  "weighted_score": 8.58,
-  "accuracy": 9.5,
-  "clarity": 9.0,
-  "conciseness": 9.0,
-  "helpfulness": 8.0,
-  "consistency": 7.38
-}
-```
+There is no automated test suite in this repository. The project contains no `tests/` directory, no unit test framework in `pyproject.toml`, and no continuous integration (CI) pipeline.
 
-To retarget the app at a different task entirely, edit `DEFAULT_BASE_PROMPT` / `DEFAULT_TASK_DESCRIPTION` in `prompts.py` and `DEFAULT_BENCHMARK` in `benchmark.py` — or just use the "Auto-generated" benchmark mode with a new task description.
+Testing must be conducted manually against a running instance of the application:
 
-## Future Improvements
+1. Launch the application with `uv run streamlit run app.py`.
+2. Configure a test run in the sidebar and click **Start Optimization**.
+3. Verify that generations advance, metrics update, and no unhandled exceptions are raised.
+4. Verify that the **Best Prompt**, **Pareto Front**, and **History** tabs render expected tables and charts.
+5. Verify that downloaded files (`best_prompt.txt`, `history.json`, `history.csv`) contain valid records.
 
-- Expose the elite pool cap as its own sidebar control (currently fixed to `max(population size, 3)`).
-- Optional toggle to surface fine-tuned/dated model deployments in the model dropdown (hidden by default).
-- A non-Streamlit CLI entry point for headless/batch runs.
-- Containerization (Dockerfile) for deployment outside a local machine.
+## Known limitations
+
+- **In-memory state persistence**: Optimization state is stored exclusively in process memory via LangGraph's `InMemorySaver`. Shutting down the server or starting a new run discards all candidate history, Pareto front records, and cached evaluation scores.
+- **Sequential evaluation**: Candidates are evaluated against benchmark cases sequentially in a loop. There is no concurrent batching or asynchronous API dispatch across test cases.
+- **Exact-match cache keys**: The score cache keys entries strictly on the exact prompt string. Minor whitespace or formatting variations result in a cache miss and trigger full re-evaluation.
+- **Hardcoded embedding model**: Embeddings use `text-embedding-3-small`. If an OpenAI-compatible endpoint does not support embeddings or this specific model identifier, vector retrieval fails and diversity filtering is skipped.
+- **Elite pool minimum floor**: Multi-objective selection floors the elite pool capacity at `max(population_size, 3)`. Setting `population_size` to 2 results in 3 elites being carried forward, exceeding the requested population count before variations are generated.
+- **Destructive benchmark regeneration**: Triggering auto-generation overwrites `data/generated_benchmark.json` without versioning or history backups.
+- **No automated test harness**: Verification relies entirely on manual local execution.
 
 ## Documentation
 
-| Document | Purpose |
-|---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Cited technical deep-dive: tech stack, subsystems, data flow, and inferred design decisions |
-| [USAGE.md](USAGE.md) | Step-by-step walkthrough of the app, plus a troubleshooting table |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to set up a dev environment and submit a change |
-| [SECURITY.md](SECURITY.md) | How to report a vulnerability privately |
-| [SUPPORT.md](SUPPORT.md) | Where to get help and what response time to expect |
-| [DISCLAIMER.md](DISCLAIMER.md) | Data responsibility, no-warranty, and no-financial-relationship terms |
-| [LICENSE](LICENSE) | MIT license terms |
+Detailed documentation is available in the `docs/` directory:
 
-## Contributing
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): System architecture, execution flow diagrams, state schema, and external services.
+- [docs/TECHNICAL.md](docs/TECHNICAL.md): Detailed module implementations, operational invariants, error recovery, and persistence paths.
+- [docs/RUNBOOK.md](docs/RUNBOOK.md): Operational guide, start/stop procedures, common errors, and diagnostics.
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md): Contribution guidelines, local setup, branch conventions, and PR requirements.
 
-Bug reports, feature requests, doc fixes, and pull requests are all welcome — this is a community-driven project maintained on a best-effort basis, and no contribution is too small. See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up, and [SUPPORT.md](SUPPORT.md) for how to ask a question or report an issue.
-
-## Disclaimer & Data Responsibility
-
-Everything this app processes — your base prompt, task description, benchmark cases, and generated candidate prompts — is **100% your responsibility**. It runs on your own machine with your own API key; nothing is sent anywhere except to whichever OpenAI-compatible endpoint (or Agnes AI) you've configured. Optimization run state lives only in memory and is not persisted to disk; the one exception is an auto-generated benchmark, saved locally and unencrypted to `data/generated_benchmark.json`. Please read the full [DISCLAIMER.md](DISCLAIMER.md) before using this with anything sensitive, and see [SECURITY.md](SECURITY.md) to report a vulnerability privately.
-
-## Support the Project
-
-If you find this useful, the best ways to support it are to **use it, report bugs, suggest features, or contribute code** — see [Contributing](#contributing) above. This project does **not** want or accept donations, sponsorships, or any other financial support. It's shared freely because it's useful, not for profit.
-
-## License
-
-[MIT](LICENSE)
-
-## Acknowledgements
-
-Built on [Streamlit](https://streamlit.io/), [LangGraph](https://github.com/langchain-ai/langgraph), [LangChain](https://python.langchain.com/), and the OpenAI-compatible chat/embeddings API.
-
-<p align="center">Made with ❤️ by Ahmad Mujtaba</p>
+Additional project documents:
+- [DISCLAIMER.md](DISCLAIMER.md): Data responsibility and warranty disclaimer.
+- [SECURITY.md](SECURITY.md): Vulnerability reporting procedures.
+- [SUPPORT.md](SUPPORT.md): Support expectations and guidelines.
+- [LICENSE](LICENSE): MIT License terms.

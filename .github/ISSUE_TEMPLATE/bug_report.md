@@ -7,7 +7,7 @@ assignees: ''
 ---
 
 **Describe the bug**
-A clear, concise description of what's wrong.
+Describe what is wrong.
 
 **To reproduce**
 Steps to reproduce the behavior:
@@ -19,7 +19,7 @@ Steps to reproduce the behavior:
 What you expected to happen instead.
 
 **Screenshots / logs**
-If applicable, add screenshots or the relevant terminal/Streamlit output, or paste the run's "Logs" expander content. Please redact your API key and any sensitive prompt/task content before pasting.
+Add screenshots, relevant terminal or Streamlit output, or the run's "Logs" expander content when useful. Redact your API key and any sensitive prompt or task content.
 
 **Environment**
 - OS: [e.g. Windows 11, Ubuntu 24.04]
@@ -29,4 +29,4 @@ If applicable, add screenshots or the relevant terminal/Streamlit output, or pas
 - Commit/branch you're running on:
 
 **Additional context**
-Anything else that might help — e.g. whether this happens every run or only some, whether it started after an update, etc.
+Add details such as whether this occurs on every run or began after an update.

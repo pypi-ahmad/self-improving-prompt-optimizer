@@ -1,159 +1,146 @@
-"""LLM execution, LLM-as-judge scoring, and embeddings.
+"""Candidate execution and independent judging with explicit failure records."""
 
-All model calls go through here so graph.py stays free of prompt-formatting
-and API-shape details.
-
-Must not raise out of judge_output or embed_texts for ordinary provider
-failures — callers depend on graceful degradation (neutral fallback scores,
-skipped diversity filtering) to keep one bad LLM/embeddings call from
-aborting an entire generation.
-
-See graph.py for how these functions are called each generation, and
-prompts.py for the templates formatted here (JUDGE_PROMPT_TEMPLATE).
-"""
-
-import json
-import os
 import statistics
+from concurrent.futures import ThreadPoolExecutor
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from openai import OpenAI
+from contracts import METRICS, EvaluationResult, check_output, parse_json, validate_judgment
+from prompts import judge_messages
+from utils import weighted_score
 
-from prompts import JUDGE_PROMPT_TEMPLATE
-from utils import strip_json_fence
-
-JUDGED_METRICS = ["accuracy", "clarity", "conciseness", "helpfulness"]
-ALL_METRICS = JUDGED_METRICS + ["consistency"]
-
-FALLBACK_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]
-PREFERRED_DEFAULTS = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-5-mini", "gpt-4o", "gpt-4.1"]
-
-# Extra OpenAI-compatible providers beyond the default OPENAI_API_KEY/OPENAI_BASE_URL
-# one, keyed by exact model id. Add a line here for any other provider the same way.
-EXTRA_PROVIDERS = {
-    "agnes-2.5-flash": {"api_key_env": "AGNES_API_KEY", "base_url": "https://apihub.agnes-ai.com/v1"},
-}
+ALL_METRICS = METRICS
+JUDGED_METRICS = METRICS
 
 
-def _base_url() -> str | None:
-    return os.environ.get("OPENAI_BASE_URL") or None
-
-
-# Single choke point mapping a model name to its API key/base_url, including the
-# EXTRA_PROVIDERS override — extend provider routing here, not by branching in callers.
-def _credentials_for(model_name: str) -> tuple[str, str | None]:
-    provider = EXTRA_PROVIDERS.get(model_name)
-    if provider:
-        return os.environ[provider["api_key_env"]], provider["base_url"]
-    return os.environ["OPENAI_API_KEY"], _base_url()
-
-
-def build_llm(model_name: str, temperature: float) -> ChatOpenAI:
-    api_key, base_url = _credentials_for(model_name)
-    return ChatOpenAI(
-        model=model_name,
-        temperature=temperature,
-        api_key=api_key,
-        base_url=base_url,
+def evaluate_case(runtime, contract, guidance, prompt, case, phase, repeat):
+    result = {
+        "id": case["id"],
+        "input": case["input"],
+        "guideline": case["guideline"],
+        "repeat": repeat,
+        "output": "",
+        "scores": None,
+        "rationale": "",
+        "checks": [],
+        "usage_ids": [],
+        "error": None,
+    }
+    response = runtime.call("candidate", [("system", prompt), ("human", case["input"])], phase)
+    result["usage_ids"].append(response.get("usage_id"))
+    if response["status"] != "complete":
+        return {
+            **result,
+            "status": "budget_skipped" if response["status"] == "budget_skipped" else "generation_failed",
+            "error": response["error"],
+        }
+    result["output"] = response["text"]
+    result["checks"] = check_output(response["text"], case["checks"])
+    judgment = runtime.call(
+        "judge", judge_messages(contract, guidance, prompt, case, response["text"]), phase
     )
-
-
-def build_embeddings(model_name: str = "text-embedding-3-small") -> OpenAIEmbeddings:
-    return OpenAIEmbeddings(
-        model=model_name,
-        api_key=os.environ["OPENAI_API_KEY"],
-        base_url=_base_url(),
-    )
-
-
-def list_available_models() -> list[str]:
-    """Best-effort chat-model list from the configured base URL, with a
-    sensible small/cheap model sorted first. Excludes fine-tuned deployments
-    (their ids contain ':') since a benchmark run isn't the place to pick one.
-    Falls back to a short hardcoded list if the endpoint doesn't expose /models.
-    Models from EXTRA_PROVIDERS are appended when their API key is set."""
+    result["usage_ids"].append(judgment.get("usage_id"))
+    if judgment["status"] != "complete":
+        return {
+            **result,
+            "status": "budget_skipped" if judgment["status"] == "budget_skipped" else "judge_failed",
+            "error": judgment["error"],
+        }
     try:
-        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], base_url=_base_url())
-        ids = sorted(m.id for m in client.models.list().data if ":" not in m.id)
-        if ids:
-            preferred = [m for m in PREFERRED_DEFAULTS if m in ids]
-            rest = [m for m in ids if m not in preferred]
-            models = preferred + rest
-        else:
-            models = list(FALLBACK_MODELS)
-    except Exception:
-        models = list(FALLBACK_MODELS)
-
-    extras = [name for name, p in EXTRA_PROVIDERS.items() if os.environ.get(p["api_key_env"])]
-    return models + [m for m in extras if m not in models]
+        scores = validate_judgment(parse_json(judgment["text"]))
+    except (ValueError, TypeError):
+        return {**result, "status": "judge_failed", "error": {"type": "InvalidJudgment", "status_code": None}}
+    result["scores"] = {metric: scores[metric] for metric in METRICS}
+    result["rationale"] = scores["rationale"]
+    return {
+        **result,
+        "status": "complete" if all(check["passed"] for check in result["checks"]) else "check_failed",
+    }
 
 
-def run_candidate_prompt(llm: ChatOpenAI, candidate_prompt: str, input_text: str) -> str:
-    messages = [("system", candidate_prompt), ("human", input_text)]
-    return llm.invoke(messages).content
+def aggregate(prompt, rows) -> EvaluationResult:
+    complete = bool(rows) and all(row["scores"] is not None for row in rows)
+    metrics = {m: statistics.fmean(row["scores"][m] for row in rows) for m in METRICS} if complete else None
+    per_case_means = {}
+    for row in rows:
+        if row["scores"]:
+            per_case_means.setdefault(row["id"], []).append(statistics.fmean(row["scores"].values()))
+    repeatability = None
+    if complete and per_case_means and all(len(scores) > 1 for scores in per_case_means.values()):
+        repeatability = statistics.fmean(statistics.pstdev(scores) for scores in per_case_means.values())
+    return {
+        "prompt": prompt,
+        "status": "complete" if complete else "incomplete",
+        "metrics": metrics,
+        "per_case": rows,
+        "eligible": complete and all(row["status"] == "complete" for row in rows),
+        "cross_case_spread": statistics.pstdev([statistics.fmean(s) for s in per_case_means.values()])
+        if complete
+        else None,
+        "repeatability": repeatability,
+    }
 
 
-def judge_output(
-    llm: ChatOpenAI, candidate_prompt: str, case: dict, output_text: str, log: list[str]
-) -> dict:
-    # Always returns all of JUDGED_METRICS as floats, success or failure — callers
-    # (evaluate_prompt) index into this dict unconditionally and never check for
-    # missing keys.
-    prompt = JUDGE_PROMPT_TEMPLATE.format(
-        candidate_prompt=candidate_prompt,
-        input_text=case["input"],
-        guideline=case["guideline"],
-        output_text=output_text,
-    )
-    try:
-        raw = llm.invoke(prompt).content
-        data = json.loads(strip_json_fence(raw))
-        return {m: float(data[m]) for m in JUDGED_METRICS}
-    except Exception as exc:
-        log.append(f"  judge parse failed ({exc}); using neutral fallback scores")
-        return {m: 5.0 for m in JUDGED_METRICS}
+def evaluate_prompts(runtime, contract, guidance, prompts, cases, phase="optimization", repeats=1):
+    tasks = [(prompt, case, repeat) for prompt in prompts for repeat in range(repeats) for case in cases]
+
+    def run(task):
+        prompt, case, repeat = task
+        return evaluate_case(runtime, contract, guidance, prompt, case, phase, repeat)
+
+    with ThreadPoolExecutor(max_workers=runtime.concurrency) as pool:
+        # map preserves input order even though requests complete out of order.
+        rows = list(pool.map(run, tasks))
+    size = len(cases) * repeats
+    return [aggregate(prompt, rows[i * size : (i + 1) * size]) for i, prompt in enumerate(prompts)]
 
 
-def consistency_score(per_case_overall: list[float]) -> float:
-    """10 = identical quality across every test case, lower = more variance."""
-    if len(per_case_overall) < 2:
-        return 10.0
-    spread = statistics.pstdev(per_case_overall)
-    # ponytail: linear penalty on stdev, tune the 3.0 scale if it feels too harsh/lenient
-    return max(0.0, 10.0 - spread * 3.0)
-
-
-def evaluate_prompt(
-    llm: ChatOpenAI, candidate_prompt: str, benchmark: list[dict], log: list[str]
-) -> tuple[dict, list[dict]]:
-    """Run `candidate_prompt` against every benchmark case and judge each output.
-    Returns (averaged_metrics incl. consistency, per_case_detail)."""
-    per_case = []
-    for case in benchmark:
-        try:
-            output = run_candidate_prompt(llm, candidate_prompt, case["input"])
-        except Exception as exc:
-            log.append(f"  generation failed for case '{case['input'][:40]}...': {exc}")
-            output = ""
-        scores = judge_output(llm, candidate_prompt, case, output, log)
-        per_case.append({"input": case["input"], "output": output, **scores})
-
-    if not per_case:
-        return {m: 0.0 for m in ALL_METRICS}, per_case
-
-    averaged = {m: statistics.fmean(c[m] for c in per_case) for m in JUDGED_METRICS}
-    per_case_overall = [statistics.fmean(c[m] for m in JUDGED_METRICS) for c in per_case]
-    averaged["consistency"] = consistency_score(per_case_overall)
-    return averaged, per_case
-
-
-def embed_texts(embeddings: OpenAIEmbeddings, texts: list[str], log: list[str]) -> list[list[float]] | None:
-    """Returns None (rather than raising) if the endpoint can't embed, so
-    diversity filtering can degrade gracefully instead of crashing the run."""
-    if not texts:
+def failure_feedback(record):
+    if not record:
         return []
-    try:
-        return embeddings.embed_documents(texts)
-    except Exception as exc:
-        log.append(f"  embeddings unavailable ({exc}); skipping diversity filter this generation")
-        return None
+    rows = sorted(
+        record["per_case"],
+        key=lambda row: (
+            row["status"] == "complete",
+            statistics.fmean(row["scores"].values()) if row["scores"] else -1,
+        ),
+    )[:3]
+    return [
+        {
+            "case_id": row["id"],
+            "input": row["input"][:400],
+            "status": row["status"],
+            "rationale": row["rationale"][:500],
+            "failed_checks": [c for c in row["checks"] if not c["passed"]],
+        }
+        for row in rows
+    ]
+
+
+def comparison_report(baseline, candidate, weights):
+    complete = baseline["status"] == candidate["status"] == "complete"
+    same = baseline["prompt"] == candidate["prompt"]
+    improved = (
+        complete
+        and not same
+        and candidate["eligible"]
+        and weighted_score(candidate["metrics"], weights) > weighted_score(baseline["metrics"], weights)
+        and candidate["metrics"]["accuracy"] >= baseline["metrics"]["accuracy"]
+    )
+    regressions = []
+    if complete:
+        ids = dict.fromkeys(row["id"] for row in baseline["per_case"])
+        for case_id in ids:
+            a = aggregate(baseline["prompt"], [r for r in baseline["per_case"] if r["id"] == case_id])
+            b = aggregate(candidate["prompt"], [r for r in candidate["per_case"] if r["id"] == case_id])
+            assert a["metrics"] is not None and b["metrics"] is not None
+            delta = {m: b["metrics"][m] - a["metrics"][m] for m in METRICS}
+            if any(value < 0 for value in delta.values()) or not b["eligible"]:
+                regressions.append({"case_id": case_id, "delta": delta, "checks_passed": b["eligible"]})
+    return {
+        "status": "complete" if complete else "incomplete",
+        "improved": improved,
+        "recommendation": candidate["prompt"] if improved else baseline["prompt"],
+        "baseline": baseline,
+        "candidate": candidate,
+        "regressions": regressions,
+        "note": "Observed differences on this benchmark; no statistical significance claim.",
+    }

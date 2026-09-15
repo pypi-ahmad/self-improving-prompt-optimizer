@@ -1,77 +1,26 @@
 # Contributing
 
-This guide describes the development setup, branch conventions, and testing requirements for contributing to Self-Improving Prompt Optimizer.
+## Local setup
 
-## Development setup
+Use Python 3.13 and uv. Run `uv sync` from the repository root to install the locked runtime and development dependencies. After configuring the provider environment, launch with `uv run streamlit run app.py`. Do not commit `.env`, generated benchmark data, or verification artifacts.
 
-### Prerequisites
-
-- Python `>=3.13` (runtime version specified in `pyproject.toml` and `.python-version`)
-- [uv](https://docs.astral.sh/uv/) package manager
-- Access to an OpenAI-compatible API endpoint
-
-### Installation
-
-Clone the repository and install dependencies using `uv`:
+## Required checks
 
 ```bash
-git clone https://github.com/pypi-ahmad/self-improving-prompt-optimizer.git
-cd self-improving-prompt-optimizer
-uv sync
+uv run pytest -q
+uv run ruff check app.py benchmark.py contracts.py evaluator.py graph.py prompts.py reporting.py runtime.py tests scripts
+uv run ty check app.py benchmark.py contracts.py evaluator.py graph.py prompts.py reporting.py runtime.py scripts
+git diff --check
 ```
 
-Configure local environment variables:
+Tests use fake providers and Streamlit AppTest. Cover the changed behavior, particularly budget reservations and retries, failed judgments, benchmark isolation, score-cache fingerprints, and checkpointed UI controls. Offline tests must never make billable calls.
 
-```bash
-# On Unix-like shells
-cp .env.example .env
+For a live check, obtain a spending allowance first. `uv run python -m scripts.live_smoke` uses Luna medium and Terra medium, two generations, population four, two optimization cases, two holdout cases, and balanced final validation. It shares an 80-attempt/$6 ledger across restarts at `artifacts/verification_budget.json`. Do not reset that file to evade the allowance. Inspect safe artifact metadata before retrying a failed run, then report the actual attempts and estimated cost.
 
-# On Windows cmd
-copy .env.example .env
-```
+## Contribution boundaries
 
-Set `OPENAI_API_KEY` in `.env`.
+The target branch is `main`. Branches, commits, pushes, and pull requests require the repository owner's authorization in agent workflows. No CI workflow is currently configured.
 
-To run the application locally during development:
+Preserve unrelated work, existing provider credential names, and the local-first architecture. Keep the skill adaptations portable; do not add absolute paths to a personal skill directory. Changes to guidance must be reflected in its version/provenance and tested through the messages actually sent to models.
 
-```bash
-uv run streamlit run app.py
-```
-
-## Branch expectations
-
-- The repository maintains a single target branch: `main`.
-- Feature and bugfix branches should branch off `main` and submit pull requests targeting `main`.
-- Continuous integration (CI) workflows are not configured in this repository (there is no `.github/workflows/` directory). All verification is currently performed by human reviewers.
-
-## Testing expectations
-
-The repository does not contain an automated test suite. There is no `tests/` directory and no test runner configured in `pyproject.toml`.
-
-Per the pull request template (`.github/PULL_REQUEST_TEMPLATE.md`), changes must be verified through manual testing:
-
-1. **Local end-to-end execution**:
-   - Launch the Streamlit application locally.
-   - Run a multi-generation optimization using the built-in benchmark.
-   - Verify that all three selection strategies (`hybrid`, `weighted`, `pareto`) execute without raising unhandled exceptions.
-   - Confirm that the **Best Prompt**, **Pareto Front**, and **History** tabs populate correctly.
-   - Verify that file downloads (`best_prompt.txt`, `history.json`, `history.csv`) produce valid content.
-2. **Auto-benchmark generation** (if modifying `benchmark.py` or `prompts.py`):
-   - Switch benchmark mode to "Auto-generated" and trigger benchmark creation.
-   - Verify that test cases are generated, displayed, and written to `data/generated_benchmark.json`.
-3. **Mid-run controls** (if modifying `app.py` or `graph.py`):
-   - Test Stop and Resume functionality.
-   - Test custom prompt injection during paused execution.
-
-## Pull request checklist
-
-Contributors submitting pull requests should ensure:
-
-- The change has been tested by running the application locally.
-- Documentation has been updated if setup steps, environment variables, or user-facing behavior changed.
-- No new required external service dependencies are introduced beyond OpenAI-compatible API endpoints.
-- No API keys, `.env` files, or populated benchmark data files (`data/generated_benchmark.json`) are staged or committed.
-
-## Pull request template
-
-The repository provides a template at `.github/PULL_REQUEST_TEMPLATE.md` with sections for describing changes, related issues, manual test steps taken, and checklist verification.
+Update usage, architecture, and data-handling documentation when behavior changes. Distinguish offline checks, live workflow checks, and measured prompt-quality comparisons in reports. A successful API request does not prove a prompt improves arbitrary tasks.

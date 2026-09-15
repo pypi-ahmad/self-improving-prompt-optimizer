@@ -1,10 +1,10 @@
 ## What does this PR do?
 
-<!-- A short description of the change and why it's needed. -->
+<!-- Briefly describe the change and why it is needed. -->
 
 ## Related issue
 
-<!-- Link to an existing issue, if any (e.g. "Closes #12"). Not required for small fixes. -->
+<!-- Link an existing issue when relevant, for example "Closes #12". Small fixes need no issue. -->
 
 ## Type of change
 
@@ -16,9 +16,8 @@
 
 ## How was this tested?
 
-<!-- Since this repo has no automated test suite yet, describe the manual steps you took:
-     e.g. "Ran a full optimization end-to-end with the built-in benchmark and the Hybrid
-     selection strategy, confirmed the Pareto Front and History tabs render correctly." -->
+<!-- Include relevant pytest, Ruff, and type-check results. For a live check,
+     report its call count and estimated cost. Do not include credentials or private task content. -->
 
 ## Checklist
 
@@ -29,4 +28,4 @@
 
 ## Anything else the reviewer should know?
 
-<!-- Optional: known limitations, follow-up work you're deferring, etc. -->
+<!-- Optional: known limitations or deferred follow-up work. -->

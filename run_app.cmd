@@ -1,5 +1,5 @@
 @echo off
-REM Windows one-click launcher: installs uv if missing, seeds .env on first run,
+REM Windows one-click launcher: installs uv if missing, seeds .env when needed,
 REM then runs `uv sync` and starts the Streamlit app. See README.md's
 REM "Installation & Setup" for the manual, any-OS equivalent of these steps.
 setlocal
@@ -15,9 +15,8 @@ if errorlevel 1 (
     set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 )
 
-REM Only runs when .env is absent, so an existing .env (and any values already
-REM set in it) is never overwritten by re-running this script.
-if not exist ".env" (
+REM Configured environment credentials need no .env file. Never overwrite one.
+if not defined OPENAI_API_KEY if not exist ".env" (
     if exist ".env.example" (
         echo No .env found - copying .env.example as a starting point.
         copy /y ".env.example" ".env" >nul
@@ -25,9 +24,9 @@ if not exist ".env" (
     )
 )
 
-if "%OPENAI_API_KEY%"=="" (
+if not defined OPENAI_API_KEY (
     echo [WARNING] OPENAI_API_KEY is not set in your environment.
-    echo The app will fail to call the model until it is set (in .env or system-wide).
+    echo Set it in .env or the system environment before using the app.
 )
 
 echo Installing/updating dependencies with uv...
@@ -38,9 +37,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Starting the Self-Improving Prompt Optimizer...
-REM --server.port duplicates the port already pinned in .streamlit/config.toml;
-REM unclear from this file why both are set.
-uv run streamlit run app.py --server.port 8531
+echo Clearing port 7080...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\clear_app_port.ps1" -Port 7080
+if errorlevel 1 (
+    echo [ERROR] Could not clear port 7080. The app was not started.
+    pause
+    exit /b 1
+)
+
+echo Starting the Self-Improving Prompt Optimizer at http://localhost:7080 ...
+REM Pin the same port that was cleared, even if an environment override is set.
+uv run streamlit run app.py --server.port 7080 --theme.base dark
 
 pause

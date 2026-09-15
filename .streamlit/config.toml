@@ -1,2 +1,5 @@
 [server]
-port = 8531
+port = 7080
+
+[theme]
+base = "dark"

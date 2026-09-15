@@ -7,16 +7,16 @@ assignees: ''
 ---
 
 **What problem would this solve?**
-A clear description of the problem or limitation you've run into. (e.g. "I can't cap the elite pool independently of population size.")
+Describe the problem or limitation. For example: "I can't cap the elite pool independently of population size."
 
 **Describe the solution you'd like**
-What you'd like to see happen. Be as specific as you can — a new sidebar control, a new selection strategy, a new judging metric, a CLI entry point, etc.
+Describe the change you want. Specific examples include a sidebar control, selection strategy, judging metric, or CLI entry point.
 
 **Describe alternatives you've considered**
 Any other approaches or workarounds you've thought about or tried.
 
 **Additional context**
-Anything else — related issues, links, mockups, or examples from other projects. If you have one in mind, the README's [Future Improvements](../../README.md#future-improvements) list is a good place to check first.
+Add related issues, links, mockups, or examples from other projects. The README's [Future Improvements](../../README.md#future-improvements) list may also be useful.
 
 ---
-This project is free and community-driven, maintained on a best-effort basis — no timeline is promised, but every suggestion is read. PRs implementing your own idea are very welcome; see [CONTRIBUTING.md](../../CONTRIBUTING.md).
+This free, community-driven project is maintained on a best-effort basis, with no promised timeline. Pull requests that implement your idea are welcome; see [CONTRIBUTING.md](../../CONTRIBUTING.md).

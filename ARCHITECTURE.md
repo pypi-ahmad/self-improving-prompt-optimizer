@@ -1,3 +1,3 @@
 # Architecture
 
-The system architecture documentation has moved to [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+System architecture documentation is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

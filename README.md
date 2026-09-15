@@ -1,6 +1,8 @@
 # Self-Improving Prompt Optimizer
 
-Self-Improving Prompt Optimizer is an agentic system that iteratively evolves and refines system prompts across generations. Orchestrated with LangGraph and evaluated using multi-objective LLM-as-judge scoring, the application mutates, crosses over, diversity-filters, and selects candidate prompts against a test benchmark through an interactive Streamlit web interface.
+Self-Improving Prompt Optimizer improves system prompts in a local Streamlit app. LangGraph coordinates mutation, crossover, independent judging, repeated finalist evaluation, and a final comparison on unseen holdout cases. Repository-owned adaptations of Prompt Customizer and Prompt Engineer guide generation and evaluation while preserving the original task.
+
+By default, `gpt-5.6-luna` generates and executes candidates and `gpt-5.6-terra` judges them, both with medium reasoning effort. Each run has a $6 allowance, a 1,000-attempt limit, and at most four concurrent requests. These settings are configurable before preparation begins.
 
 ## Requirements
 
@@ -12,13 +14,16 @@ Self-Improving Prompt Optimizer is an agentic system that iteratively evolves an
   - `langgraph>=1.2.11`
   - `python-dotenv>=1.2.2`
   - `streamlit>=1.61.1`
-- External API access: An OpenAI-compatible API endpoint providing chat completions and vector embeddings (`text-embedding-3-small`).
+  - `jsonschema>=4.26.0`
+  - `referencing>=0.37.0`
+  - `openai>=3.0.0`
+- External API access: An OpenAI-compatible chat-completions endpoint supporting the selected models and request parameters. Embeddings are optional; unpriced or unavailable embeddings are skipped.
 
 ## Setup and run commands
 
 ### Installation (cross-platform)
 
-Clone the repository and install dependencies using `uv`:
+Clone the repository, then install its dependencies with `uv`:
 
 ```bash
 git clone https://github.com/pypi-ahmad/self-improving-prompt-optimizer.git
@@ -28,28 +33,29 @@ uv sync
 
 ### Running the application (cross-platform)
 
-Ensure environment variables are configured, then launch the Streamlit server:
+Configure the environment variables, then start the Streamlit server:
 
 ```bash
 uv run streamlit run app.py
 ```
 
-The web interface serves by default at `http://localhost:8531` (configured in `.streamlit/config.toml`).
+The web interface serves by default at `http://localhost:7080` (configured in `.streamlit/config.toml`).
 
 ### Automated launcher (Windows only)
 
-On Windows systems, a batch script is provided to automate environment initialization and startup:
+Windows users can use the batch script to prepare the environment and start the app:
 
 ```cmd
 run_app.cmd
 ```
 
-`run_app.cmd` performs the following steps:
+`run_app.cmd`:
 1. Installs `uv` via PowerShell if not found on the system PATH.
-2. Copies `.env.example` to `.env` if `.env` is absent.
+2. Copies `.env.example` to `.env` only if both `.env` and an environment API key are absent.
 3. Warns if `OPENAI_API_KEY` is not set.
 4. Executes `uv sync`.
-5. Starts Streamlit on port `8531`.
+5. Stops existing processes listening on port `7080`; aborts if the port cannot be cleared.
+6. Starts Streamlit at `http://localhost:7080` with the dark theme.
 
 ## Configuration
 
@@ -59,9 +65,9 @@ The application reads configuration from system environment variables and `.env`
 
 | Variable | Required | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | Yes | API key for the OpenAI or OpenAI-compatible endpoint. The application halts at startup if unset. |
+| `OPENAI_API_KEY` | Yes | API key for the OpenAI or OpenAI-compatible endpoint. The app stops at startup if it is unset. |
 | `OPENAI_BASE_URL` | No | Base URL for the OpenAI-compatible endpoint. Defaults to `https://api.openai.com/v1` if unset. |
-| `AGNES_API_KEY` | No | API key for Agnes AI. If set, exposes `agnes-2.5-flash` (`https://apihub.agnes-ai.com/v1`) as a selectable model in the UI dropdown. |
+| `AGNES_API_KEY` | No | Used when a model field is set to `agnes-2.5-flash`; requests go to `https://apihub.agnes-ai.com/v1`. Configure its prices and supported parameters before starting. |
 
 An example template is provided in `.env.example`:
 
@@ -76,17 +82,23 @@ AGNES_API_KEY=your-agnes-key-here
 
 - `.env`: Local environment file (ignored by version control).
 - `.env.example`: Reference configuration template.
-- `.streamlit/config.toml`: Pins the server port to `8531`.
+- `.streamlit/config.toml`: Pins the server port to `7080`.
 
 ## Repository map
 
 ```
 self-improving-prompt-optimizer/
 ├── app.py                 # Streamlit UI, sidebar controls, step execution, and data exports
-├── graph.py               # LangGraph state machine, 7 optimization nodes, and checkpointer
-├── evaluator.py           # Model and embedding client factory, candidate execution, and scoring
-├── benchmark.py           # Static 8-case benchmark, loader, saver, and auto-generation
-├── prompts.py             # Default prompts and JSON-only meta-prompt templates
+├── graph.py               # Checkpointed search, finalist, and holdout stages
+├── evaluator.py           # Candidate execution, independent judging, and aggregation
+├── runtime.py             # Provider calls, concurrency, retry accounting, and budget reservations
+├── contracts.py           # Immutable task data, skill loading, and output validation
+├── reporting.py           # Versioned run exports and history formats
+├── benchmark.py           # 12 optimization cases, 4 holdout cases, import and generation
+├── prompts.py             # Role-specific messages assembled from the skill guidance
+├── guidance/              # Portable, versioned adaptations of both supplied skills
+├── tests/                 # Offline provider, workflow, budget, and Streamlit tests
+├── scripts/live_smoke.py  # Explicit live check with a persistent 80-call / $6 allowance
 ├── utils.py               # Pure-stdlib helper functions (Pareto front, cosine similarity, weights)
 ├── run_app.cmd            # Windows-only automated setup and launch script
 ├── pyproject.toml         # Project metadata and dependency definitions
@@ -94,7 +106,7 @@ self-improving-prompt-optimizer/
 ├── .python-version        # Pinned Python version (3.13)
 ├── .env.example           # Environment variable template
 ├── .streamlit/
-│   └── config.toml        # Streamlit server port configuration (8531)
+│   └── config.toml        # Streamlit server port configuration (7080)
 ├── data/
 │   └── generated_benchmark.json  # Runtime auto-generated benchmark (git-ignored)
 └── docs/
@@ -106,29 +118,44 @@ self-improving-prompt-optimizer/
 
 ## How to run tests
 
-There is no automated test suite in this repository. The project contains no `tests/` directory, no unit test framework in `pyproject.toml`, and no continuous integration (CI) pipeline.
+Offline tests mock all providers, including Streamlit AppTest workflows:
 
-Testing must be conducted manually against a running instance of the application:
+```bash
+uv run pytest -q
+uv run ruff check app.py benchmark.py contracts.py evaluator.py graph.py prompts.py reporting.py runtime.py tests scripts
+uv run ty check app.py benchmark.py contracts.py evaluator.py graph.py prompts.py reporting.py runtime.py scripts
+```
 
-1. Launch the application with `uv run streamlit run app.py`.
-2. Configure a test run in the sidebar and click **Start Optimization**.
-3. Verify that generations advance, metrics update, and no unhandled exceptions are raised.
-4. Verify that the **Best Prompt**, **Pareto Front**, and **History** tabs render expected tables and charts.
-5. Verify that downloaded files (`best_prompt.txt`, `history.json`, `history.csv`) contain valid records.
+`uv run python -m scripts.live_smoke` makes real API calls. It uses a shared ledger at `artifacts/verification_budget.json`, capped at 80 attempts and $6 across restarts, and writes a sanitized run export to `artifacts/live_smoke.json`. Read [the contributor guide](docs/CONTRIBUTING.md) before running it. CI is not configured.
+
+## Evaluation and prices
+
+Selection uses accuracy, clarity, conciseness, and helpfulness. Cross-case spread and repeatability are diagnostics rather than ranking objectives. Invalid judgments do not become neutral scores. Incomplete evaluations and hard-check failures cannot enter the elite pool.
+
+After search, the baseline and top two non-baseline candidates receive two fresh evaluations on optimization cases. The selected prompt and baseline then receive two evaluations on holdout cases. Holdout results never enter mutation feedback or choose a different finalist. **Comparison** displays the recommendation, per-case outputs, regressions, and incomplete validation explicitly.
+
+Default prices are user-supplied USD rates per million tokens:
+
+| Model | Input | Cached input | Output |
+|---|---:|---:|---:|
+| `gpt-5.6-luna` | $0.20 | $0.02 | $1.20 |
+| `gpt-5.6-terra` | $2.00 | $0.20 | $12.00 |
+
+Before each attempt, the runtime reserves uncached input and maximum completion costs, then reconciles reported usage. It keeps the reservation when usage is missing. Completion tokens include reasoning. Estimated charges depend on configured rates and provider metering; they do not limit account-wide billing.
 
 ## Known limitations
 
 - **In-memory state persistence**: Optimization state is stored exclusively in process memory via LangGraph's `InMemorySaver`. Shutting down the server or starting a new run discards all candidate history, Pareto front records, and cached evaluation scores.
-- **Sequential evaluation**: Candidates are evaluated against benchmark cases sequentially in a loop. There is no concurrent batching or asynchronous API dispatch across test cases.
-- **Exact-match cache keys**: The score cache keys entries strictly on the exact prompt string. Minor whitespace or formatting variations result in a cache miss and trigger full re-evaluation.
-- **Hardcoded embedding model**: Embeddings use `text-embedding-3-small`. If an OpenAI-compatible endpoint does not support embeddings or this specific model identifier, vector retrieval fails and diversity filtering is skipped.
-- **Elite pool minimum floor**: Multi-objective selection floors the elite pool capacity at `max(population_size, 3)`. Setting `population_size` to 2 results in 3 elites being carried forward, exceeding the requested population count before variations are generated.
+- **Provider-dependent judgments**: Scores and repeated-run differences are observations, not ground truth or statistical significance claims.
+- **Budget-limited validation**: A small allowance, large prompts, or provider failures can leave validation incomplete. The recommendation remains the baseline.
+- **Exact text caching**: Search cache fingerprints include the prompt, contract, benchmark, guidance, and model settings. Whitespace changes still trigger a new evaluation.
+- **Optional semantic diversity**: `text-embedding-3-small` needs an explicit price row and provider support. Otherwise exact deduplication applies.
 - **Destructive benchmark regeneration**: Triggering auto-generation overwrites `data/generated_benchmark.json` without versioning or history backups.
-- **No automated test harness**: Verification relies entirely on manual local execution.
+- **Session-only continuation**: Run JSON exports support inspection and reproduction of settings, but cannot restore in-memory graph checkpoints.
 
 ## Documentation
 
-Detailed documentation is available in the `docs/` directory:
+The `docs/` directory contains detailed documentation:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): System architecture, execution flow diagrams, state schema, and external services.
 - [docs/TECHNICAL.md](docs/TECHNICAL.md): Detailed module implementations, operational invariants, error recovery, and persistence paths.

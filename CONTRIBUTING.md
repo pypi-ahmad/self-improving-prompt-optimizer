@@ -1,3 +1,3 @@
 # Contributing
 
-The contributing guidelines have moved to [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
+Contributing guidelines are in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).

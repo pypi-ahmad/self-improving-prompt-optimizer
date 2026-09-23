@@ -4,6 +4,16 @@ Self-Improving Prompt Optimizer improves system prompts in a local Streamlit app
 
 By default, `gpt-5.6-luna` generates and executes candidates and `gpt-5.6-terra` judges them, both with medium reasoning effort. Each run has a $6 allowance, a 1,000-attempt limit, and at most four concurrent requests. These settings are configurable before preparation begins.
 
+## System diagrams
+
+### Architecture and runtime boundaries
+
+![System architecture and runtime boundaries](docs/images/system-architecture-runtime-boundaries.png)
+
+### Prompt optimization workflow
+
+![Prompt optimization workflow](docs/images/prompt-optimization-workflow.png)
+
 ## Requirements
 
 - Python: `>=3.13` (specified in `pyproject.toml` and `.python-version`)
@@ -110,6 +120,7 @@ self-improving-prompt-optimizer/
 ├── data/
 │   └── generated_benchmark.json  # Runtime auto-generated benchmark (git-ignored)
 └── docs/
+    ├── images/             # Architecture and prompt-optimization diagrams
     ├── ARCHITECTURE.md    # System architecture, state schema, data flow, and external dependencies
     ├── TECHNICAL.md       # Implementation details, invariants, error handling, and persistence
     ├── RUNBOOK.md         # Operational procedures, startup/shutdown, and troubleshooting
